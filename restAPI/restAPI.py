@@ -21,9 +21,17 @@ def index():
     payload = {'gtins': barcode}
     r = requests.get('https://hackzurich-api.migros.ch/products', params=payload, auth=(username, password))
     json_object = r.json()
-    print(json_object)
+    products = json_object.get("products")[0]
+    base_price = products.get("price").get("base").get("price")
+    average_all = products.get("ratings").get("average_all")
+    product_id = products.get("id")
+    categories_code = products.get("categories")[0].get("code")
     data = getDifferentData()
     data['item'] = json_object
+    data['base_price'] = base_price
+    data['average_all'] = average_all
+    data['product_id'] = product_id
+    data['categories_code'] = categories_code
     return jsonify(data)
 
 def getDifferentData():
