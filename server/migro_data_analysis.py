@@ -2,6 +2,12 @@ from collections import Counter
 import os
 import argparse
 import pickle
+import random
+import requests
+import json
+
+HACK_ZURICH_API_USER='hackzurich2020'
+HACK_ZURICH_API_PASS='uhSyJ08KexKn4ZFS'
 
 class ProductNode(object):
     '''
@@ -16,8 +22,32 @@ class ProductNode(object):
         self.edges[other_product_id] += weight_add
 
     def mostCommonConnections(self, n):
-        return self.edges.most_common(n)
+        return self.edges.most_common(min(n, len(self.edges) - 1))
 
+    def getInfo(self):
+        response = requests.get('https://hackzurich-api.migros.ch/products.json?ids=' + self.product_id,
+                                auth=(HACK_ZURICH_API_USER, HACK_ZURICH_API_PASS))
+        if response.status_code == 200:
+            return json.loads(response.text)
+        return None
+
+    @staticmethod
+    def getInfoForProducts(list_ids):
+        response = requests.get('https://hackzurich-api.migros.ch/products.json?ids=' + ",".join(list_ids),
+                                auth=(HACK_ZURICH_API_USER, HACK_ZURICH_API_PASS))
+        if response.status_code == 200:
+            return json.loads(response.text)
+        return None
+
+def getIdForScanned(barcode):
+    response = requests.get('https://hackzurich-api.migros.ch/products.json?gtins=' + str(barcode),
+                                auth=(HACK_ZURICH_API_USER, HACK_ZURICH_API_PASS))
+    if response.status_code == 200:
+        obj = json.loads(response.text)
+        if obj:
+            p = obj['products'][0]
+            return p['id'], p['name']
+    return None, None
 
 class KeyedGraph(object):
     '''
@@ -46,6 +76,10 @@ class KeyedGraph(object):
             return self.nodes[id]
         return None
 
+    def getRandomNode(self):
+        key = random.choice(list(self.nodes.keys()))
+        return self.nodes[key]
+
 def connect_nodes_in_list(node_list):
     for i in range(len(node_list)):
         for j in range(i + 1, len(node_list)):
@@ -70,7 +104,7 @@ def createGraphFromCSVFile(file_path):
                 if not first_line:
 
                     counter_lines += 1
-                    if counter_lines % 1000 == 0:
+                    if counter_lines % 10000 == 0:
                         break
                         print(counter_lines)
 
@@ -119,7 +153,8 @@ def createGraphFromCSVFile(file_path):
             print(counter_lines, " is the number of entries processed")
             print(len(graph.nodes), " is the number of nodes in the graph")
 
-
+        return graph
+    return None
 
 if __name__ == '__main__':
 
@@ -143,6 +178,39 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--filename", help="Filename", type=str)
     args = parser.parse_args()
-    createGraphFromCSVFile(args.filename)
+    graph = createGraphFromCSVFile(args.filename)
+    random_node = graph.getRandomNode()
+    # random_node = graph.nodeForId('521007300000')
+    
+    related = random_node.mostCommonConnections(10)
+    p_info_all = ProductNode.getInfoForProducts([random_node.product_id] + [rel[0].product_id for rel in related])
+    
+    print("Selected a random product with ID: ", random_node.product_id, p_info_all['products'][0]['name'] if p_info_all else "No info")
+    if p_info_all:
+        print("The most related products are:")
+        for i in range(1, len(p_info_all['products'])):
+            p_info = None
+            if p_info_all:
+                p_info = p_info_all['products'][i]
+            print(related[i - 1][0].product_id, p_info['name'] if p_info else "No info", " with ", related[i - 1][1], " connections")
+    
 
+    print("Testing a full case: give barcode, get ID from it, and then query the graph and return related products")
+
+    id, name = getIdForScanned(7616800831954)
+    if id:
+        found_product = graph.nodeForId(id)
+
+        related = random_node.mostCommonConnections(10)
+        p_info_all = ProductNode.getInfoForProducts([found_product.product_id] + [rel[0].product_id for rel in related])
+        
+        print("Found product with ID: ", found_product.product_id, "y nombre: ", name, p_info_all['products'][0]['name'] if p_info_all else "No info")
+        if p_info_all:
+            print("The most related products are:")
+            for i in range(1, len(p_info_all['products'])):
+                p_info = None
+                if p_info_all:
+                    p_info = p_info_all['products'][i]
+                print(related[i - 1][0].product_id, p_info['name'] if p_info else "No info", " with ", related[i - 1][1], " connections")
+    print(id, name)
     

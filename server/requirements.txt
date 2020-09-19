@@ -1,3 +1,4 @@
 Flask
 Cython
 #scikit-learn==0.21.1
+requests
