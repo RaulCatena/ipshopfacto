@@ -21,6 +21,9 @@ def index():
     payload = {'gtins': barcode}
     r = requests.get('https://hackzurich-api.migros.ch/products', params=payload, auth=(username, password))
     json_object = r.json()
+    r = requests.get('https://eatfit-service.foodcoa.ch/products/' + str(barcode), auth=('eatfit_hackzurich', 'XmU8G2jeAwYzrU9K'))
+    json_object_css = r.json()
+    print(json_object_css)
     products = json_object.get("products")[0]
     base_price = products.get("price").get("base").get("price")
     average_all = products.get("ratings").get("average_all")
