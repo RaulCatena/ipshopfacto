@@ -1,4 +1,8 @@
-## TEAM Awesome application for a) Win HackZürich 2020 b) Improve groceries´ shopping experinece. Improving Migro´s subito´s plattform. Hence: ipSHOPfacto
+# IPSHOPFACTO
+![Ipshopfacto](snapfinger.png)
+TEAM Awesome application for 
+- a) Win HackZürich 2020 
+- b) Improve groceries´ shopping experinece. Improving Migro´s subito´s plattform. Hence: ipSHOPfacto
 
 ## Run locally
 - Create a virtualenv `virtualenv .venv -p $(which python3)` 
@@ -8,3 +12,6 @@
 
 ## Create Docker
 - `docker build -t ipshopfacto .`
+
+## Run the docker container
+docker run -p 8000:8000 ipshopfacto
