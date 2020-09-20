@@ -11,6 +11,10 @@ HACK_ZURICH_API_USER='hackzurich2020'
 HACK_ZURICH_API_PASS='uhSyJ08KexKn4ZFS'
 DEFAULT_GRAPH_FILE = "graph.ipfct" # Extension I make up for ipsofact
 
+BYTES_IDS = 5
+BYTES_CTS = 2
+BYTES_PAIR = BYTES_IDS + BYTES_CTS
+
 class ProductNode(object):
     '''
     An abstraction around the product object
@@ -50,9 +54,31 @@ class ProductNode(object):
         return node
 
     def toSerializedString(self):
-
-        pairs = ['{}\t{}'.format(edge[0], str(edge[1])) for edge in self.edges]
+        pairs = ['{}\t{}'.format(edge, str(count)) for edge, count in self.edges.items()]
         return self.product_id + '\t' + '\t'.join(pairs)
+        
+    
+    # ID (fixed) | Lenght Edges List (fixed) | [Id edge (fixed) | Counts (fixed)]
+    @staticmethod
+    def fromBytes(byts):
+        id = int.from_bytes(byts[0:BYTES_IDS])
+        node = ProductNode(str(id))
+
+        n_edges = int.from_bytes(byts[BYTES_IDS:BYTES_PAIR])
+        for i in range(n_edges):
+            offset = BYTES_PAIR + i * BYTES_PAIR
+            node.addEdgeTo(str(int.from_bytes(byts[offset:offset + BYTES_IDS])), int.from_bytes(bytes[offset + BYTES_IDS: offset + BYTES_PAIR]))
+
+
+    def toBytes(self):
+        bytearr = bytearray()
+        bytearr += int(self.product_id).to_bytes(BYTES_IDS, byteorder='big')
+        bytearr += len(self.edges).to_bytes(BYTES_CTS, byteorder='big')
+        for edge in self.edges:
+            bytearr += int(edge).to_bytes(BYTES_IDS, byteorder='big')
+            bytearr += int(self.edges[edge]).to_bytes(BYTES_CTS, byteorder='big')
+        return bytearr
+        
 
 def getIdForScanned(barcode):
     response = requests.get('https://hackzurich-api.migros.ch/products.json?gtins=' + str(barcode),
@@ -106,26 +132,54 @@ def connect_nodes_in_list(node_list):
                 b.addEdgeTo(a.product_id)
 
 
-def saveGraphToFile(graph, file):
+def saveGraphToFile(graph, file, binary = True):
     '''
     Serialize graph in a simple text format
     '''
-    with open(file, 'w') as f:
-        for node in graph.nodes.values():
-            f.write(node.toSerializedString())
-            f.write("\n")
+
+    print("Will save ", len(graph.nodes), "nodes")
+    if not binary:
+        with open(file, 'w') as f:
+            for node in graph.nodes.values():
+                f.write(node.toSerializedString())
+                f.write("\n")
+    else:
+        with open(file, 'wb') as f:
+            for node in graph.nodes.values():
+                f.write(node.toBytes())
 
 
-def openGraphFromFile(file):
+def openGraphFromFile(file, binary = True):
     '''
     Open Serialized graph in a simple text format to a graph
     '''
-    nodes = []
-    with open(file) as f:
-        for line in f:
-            nodes.append(ProductNode.fromSerializedString(line))
-    
-    return KeyedGraph.fromProductNodeList(nodes)
+    if not binary:
+        nodes = []
+        with open(file) as f:
+            for line in f:
+                nodes.append(ProductNode.fromSerializedString(line))
+        return KeyedGraph.fromProductNodeList(nodes)
+    else:
+        nodes = []
+        size_file = os.path.getsize(file)
+        with open(file, 'rb') as f:
+            cursor = 0
+            count = 0
+            while cursor < size_file - 1:
+                bytes_id = f.read(BYTES_IDS)
+                bytes_n_edges = f.read(BYTES_CTS)
+                node = ProductNode(str(int.from_bytes(bytes_id, byteorder='big')))
+                n_edges = int.from_bytes(bytes_n_edges, byteorder='big')
+                cursor += BYTES_PAIR
+                for i in range(n_edges):
+                    bytes_id_edge = f.read(BYTES_IDS)
+                    bytes_count = f.read(BYTES_CTS)
+                    node.addEdgeTo(str(int.from_bytes(bytes_id_edge, byteorder='big')), int.from_bytes(bytes_count, byteorder='big'))
+                    cursor += BYTES_PAIR
+            
+                nodes.append(node)
+                count += 1
+        return KeyedGraph.fromProductNodeList(nodes)
 
 
 def createGraphFromCSVFile(file_path):
@@ -145,6 +199,7 @@ def createGraphFromCSVFile(file_path):
 
                     counter_lines += 1
                     if counter_lines % 10000 == 0:
+                        # break
                         print(counter_lines)
 
                     # Get data from row
@@ -224,11 +279,13 @@ if __name__ == '__main__':
     
     print("Testing serialize deserialize ______")
 
+    do_binary_format = True
+
     start = time.time()
-    saveGraphToFile(graph, DEFAULT_GRAPH_FILE)
+    saveGraphToFile(graph, DEFAULT_GRAPH_FILE, binary = do_binary_format)
     print("It took to save the graph to file this many seconds: ", time.time() - start)
     start = time.time()
-    graph_new = openGraphFromFile(DEFAULT_GRAPH_FILE)
+    graph_new = openGraphFromFile(DEFAULT_GRAPH_FILE, binary = do_binary_format)
     print("It took to open a graph from a file this many seconds: ", time.time() - start)
 
     print("Testing find related ______")
